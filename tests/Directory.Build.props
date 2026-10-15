@@ -1,0 +1,4 @@
+<Project>
+    <Import Project="$(MSBuildThisFileDirectory)..\src\Directory.Build.props"
+            Condition="Exists('$(MSBuildThisFileDirectory)..\src\Directory.Build.props')"/>
+</Project>

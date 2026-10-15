@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copy this file to src/TerrariaWindowKit.Local.props, relative to the repository root.
+  Replace the placeholders with paths from your own machine. Do not commit the
+  resulting local props file; it contains machine-specific build configuration.
+
+  These properties are consumed by the repository's compile-check and test
+  build configuration. A separate mod project must provide its own necessary
+  references when importing TerrariaWindowKit sources.
+-->
+<Project>
+    <PropertyGroup>
+        <!-- Directory containing Terraria.exe. -->
+        <TerrariaDirectory>REPLACE_WITH_TERRARIA_INSTALL_DIRECTORY</TerrariaDirectory>
+
+        <!-- TerrariaModder Core/Harmony locations for the selected installation. -->
+        <HarmonyDll>$(TerrariaDirectory)\TerrariaModder\core\deps\0Harmony.dll</HarmonyDll>
+        <TerrariaModderCoreDll>$(TerrariaDirectory)\TerrariaModder\core\TerrariaModder.Core.dll</TerrariaModderCoreDll>
+
+        <!-- Full paths to the Microsoft XNA Framework reference assemblies. -->
+        <XnaFrameworkDll>REPLACE_WITH_MICROSOFT_XNA_FRAMEWORK_DLL</XnaFrameworkDll>
+        <XnaFrameworkGameDll>REPLACE_WITH_MICROSOFT_XNA_FRAMEWORK_GAME_DLL</XnaFrameworkGameDll>
+
+        <!--
+      Optional: only set this when your build environment needs an explicit
+      .NET Framework 4.8 reference-assemblies root.
+      <TargetFrameworkRootPath>REPLACE_WITH_NET48_REFERENCE_ASSEMBLIES_ROOT</TargetFrameworkRootPath>
+    -->
+    </PropertyGroup>
+</Project>

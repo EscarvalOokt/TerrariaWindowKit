@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Escarval.TerrariaWindowKit.CompileCheck</AssemblyName>
+        <TerrariaWindowKitIncludeCore>true</TerrariaWindowKitIncludeCore>
+    </PropertyGroup>
+    <Import Project="..\..\src\TerrariaWindowKit.Source.projitems" Label="Shared"/>
+    <Target Name="ValidateCoreCompileConfiguration" BeforeTargets="ResolveReferences">
+        <Error Condition="'$(TerrariaDirectory)' == '' or !Exists('$(TerrariaDirectory)\Terraria.exe')"
+               Text="Set TerrariaDirectory in src\TerrariaWindowKit.Local.props to a Terraria installation containing Terraria.exe."/>
+        <Error Condition="'$(TerrariaModderCoreDll)' == '' or !Exists('$(TerrariaModderCoreDll)')"
+               Text="Set TerrariaModderCoreDll in src\TerrariaWindowKit.Local.props to the selected TerrariaModder Core DLL."/>
+        <Error Condition="'$(XnaFrameworkDll)' == '' or !Exists('$(XnaFrameworkDll)')"
+               Text="Set XnaFrameworkDll in src\TerrariaWindowKit.Local.props to Microsoft.Xna.Framework.dll."/>
+        <Error Condition="'$(XnaFrameworkGameDll)' == '' or !Exists('$(XnaFrameworkGameDll)')"
+               Text="Set XnaFrameworkGameDll in src\TerrariaWindowKit.Local.props to Microsoft.Xna.Framework.Game.dll."/>
+    </Target>
+    <ItemGroup>
+        <Reference Include="Terraria">
+            <HintPath>$(TerrariaDirectory)\Terraria.exe</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="TerrariaModder.Core">
+            <HintPath>$(TerrariaModderCoreDll)</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Microsoft.Xna.Framework">
+            <HintPath>$(XnaFrameworkDll)</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Microsoft.Xna.Framework.Game">
+            <HintPath>$(XnaFrameworkGameDll)</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+<Project>
+    <PropertyGroup>
+        <HasSharedItems>true</HasSharedItems>
+        <SharedGUID>{79AE9AD6-9720-43A6-B170-CC26A3399E4A}</SharedGUID>
+        <ItemsProjectGuid>{79AE9AD6-9720-43A6-B170-CC26A3399E4A}</ItemsProjectGuid>
+    </PropertyGroup>
+    <PropertyGroup Label="Configuration">
+        <Import_RootNamespace>Escarval.TerrariaWindowKit</Import_RootNamespace>
+    </PropertyGroup>
+    <!-- Import sources into the consumer. Never reference the compile-check DLL. -->
+    <ItemGroup>
+        <Compile Include="$(MSBuildThisFileDirectory)Shared\**\*.cs">
+            <Link Condition="'$(MSBuildProjectExtension)' != '.shproj'">TerrariaWindowKit\Shared\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        </Compile>
+        <Compile Include="$(MSBuildThisFileDirectory)Core\**\*.cs"
+                 Condition="'$(TerrariaWindowKitIncludeCore)' == 'true'">
+            <Link Condition="'$(MSBuildProjectExtension)' != '.shproj'">TerrariaWindowKit\Core\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        </Compile>
+    </ItemGroup>
+</Project>

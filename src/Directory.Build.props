@@ -1,0 +1,26 @@
+<Project>
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <Version>1.0.0</Version>
+        <IsPackable>false</IsPackable>
+        <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
+        <RestoreConfigFile>$(MSBuildThisFileDirectory)NuGet.Config</RestoreConfigFile>
+        <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+        <TerrariaWindowKitCopyHarmony Condition="'$(TerrariaWindowKitCopyHarmony)' == ''">false</TerrariaWindowKitCopyHarmony>
+    </PropertyGroup>
+    <Import Project="$(MSBuildThisFileDirectory)TerrariaWindowKit.Local.props"
+            Condition="Exists('$(MSBuildThisFileDirectory)TerrariaWindowKit.Local.props')"/>
+    <ItemGroup>
+        <Reference Include="0Harmony">
+            <HintPath>$(HarmonyDll)</HintPath>
+            <Private>$(TerrariaWindowKitCopyHarmony)</Private>
+        </Reference>
+    </ItemGroup>
+    <Target Name="ValidateTerrariaWindowKitBuildConfiguration" BeforeTargets="ResolveReferences">
+        <Error Condition="'$(HarmonyDll)' == '' or !Exists('$(HarmonyDll)')"
+               Text="Set HarmonyDll in src\TerrariaWindowKit.Local.props. Create it from docs\TerrariaWindowKit.Local.props.example and point to TerrariaModder Core's deps\0Harmony.dll."/>
+    </Target>
+</Project>

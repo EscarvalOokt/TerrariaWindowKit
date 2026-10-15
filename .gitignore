@@ -1,0 +1,29 @@
+# Machine-specific configuration (the public example remains tracked)
+/src/TerrariaWindowKit.Local.props
+
+# Local project documentation, including the working Roadmap
+/docs/local/
+
+# Build and generated test artifacts
+bin/
+obj/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# IDE and per-user configuration
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Temporary editor and OS files
+*.tmp
+*.bak
+*~
+.DS_Store
+Thumbs.db

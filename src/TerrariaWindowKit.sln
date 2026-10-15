@@ -1,0 +1,44 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "TerrariaWindowKit", "TerrariaWindowKit.shproj", "{79AE9AD6-9720-43A6-B170-CC26A3399E4A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CompileCheck", "..\tests\CompileCheck\CompileCheck.csproj", "{86B409C7-50AC-42E2-9A98-9F26C20AC425}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsumerA", "..\tests\ConsumerA\ConsumerA.csproj", "{3479A64D-96F7-4B1E-8320-1D6AB7DBF222}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsumerB", "..\tests\ConsumerB\ConsumerB.csproj", "{E823234B-2114-4092-82BD-41D2AB967CD9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestHost", "..\tests\TestHost\TestHost.csproj", "{61D7EF39-14F6-4CE5-A8A4-B9603E9A432E}"
+EndProject
+Global
+  GlobalSection(SharedMSBuildProjectFiles) = preSolution
+    TerrariaWindowKit.Source.projitems*{79ae9ad6-9720-43a6-b170-cc26a3399e4a}*SharedItemsImports = 13
+    TerrariaWindowKit.Source.projitems*{86b409c7-50ac-42e2-9a98-9f26c20ac425}*SharedItemsImports = 4
+    TerrariaWindowKit.Source.projitems*{3479a64d-96f7-4b1e-8320-1d6ab7dbf222}*SharedItemsImports = 4
+    TerrariaWindowKit.Source.projitems*{e823234b-2114-4092-82bd-41d2ab967cd9}*SharedItemsImports = 4
+  EndGlobalSection
+  GlobalSection(SolutionConfigurationPlatforms) = preSolution
+    Debug|Any CPU = Debug|Any CPU
+    Release|Any CPU = Release|Any CPU
+  EndGlobalSection
+  GlobalSection(ProjectConfigurationPlatforms) = postSolution
+    {86B409C7-50AC-42E2-9A98-9F26C20AC425}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {86B409C7-50AC-42E2-9A98-9F26C20AC425}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {86B409C7-50AC-42E2-9A98-9F26C20AC425}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {86B409C7-50AC-42E2-9A98-9F26C20AC425}.Release|Any CPU.Build.0 = Release|Any CPU
+    {3479A64D-96F7-4B1E-8320-1D6AB7DBF222}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {3479A64D-96F7-4B1E-8320-1D6AB7DBF222}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {3479A64D-96F7-4B1E-8320-1D6AB7DBF222}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {3479A64D-96F7-4B1E-8320-1D6AB7DBF222}.Release|Any CPU.Build.0 = Release|Any CPU
+    {E823234B-2114-4092-82BD-41D2AB967CD9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {E823234B-2114-4092-82BD-41D2AB967CD9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {E823234B-2114-4092-82BD-41D2AB967CD9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {E823234B-2114-4092-82BD-41D2AB967CD9}.Release|Any CPU.Build.0 = Release|Any CPU
+    {61D7EF39-14F6-4CE5-A8A4-B9603E9A432E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {61D7EF39-14F6-4CE5-A8A4-B9603E9A432E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {61D7EF39-14F6-4CE5-A8A4-B9603E9A432E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {61D7EF39-14F6-4CE5-A8A4-B9603E9A432E}.Release|Any CPU.Build.0 = Release|Any CPU
+  EndGlobalSection
+EndGlobal

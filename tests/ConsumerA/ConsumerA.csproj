@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <AssemblyName>Escarval.TerrariaWindowKit.ConsumerA</AssemblyName>
+        <RootNamespace>UiConsumerA</RootNamespace>
+        <DefineConstants>$(DefineConstants);CONSUMER_A</DefineConstants>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\SharedFixtures\Facade.cs" Link="Facade.cs"/>
+    </ItemGroup>
+    <Import Project="..\..\src\TerrariaWindowKit.Source.projitems" Label="Shared"/>
+</Project>
