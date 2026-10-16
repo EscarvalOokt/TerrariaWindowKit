@@ -127,7 +127,7 @@ namespace Escarval.TerrariaWindowKit
             internal IDictionary<string, object> CreateApi() =>
                 new Dictionary<string, object>
                 {
-                    ["protocolMajor"] = ProtocolMajor, ["providerId"] = _id, ["providerVersion"] = "1.0.0",
+                    ["protocolMajor"] = ProtocolMajor, ["providerId"] = _id, ["providerVersion"] = "1.1.0",
                     ["wheelPriorityAtVersion"] = 1,
                     ["register"] = new Func<IDictionary<string, object>, IDisposable>(Register),
                     ["activate"] = new Action<string>(Activate),

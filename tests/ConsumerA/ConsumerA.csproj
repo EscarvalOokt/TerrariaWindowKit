@@ -8,6 +8,7 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="..\SharedFixtures\Facade.cs" Link="Facade.cs"/>
+        <Compile Include="..\SharedFixtures\ContentInputFacade.cs" Link="ContentInputFacade.cs"/>
     </ItemGroup>
     <Import Project="..\..\src\TerrariaWindowKit.Source.projitems" Label="Shared"/>
 </Project>

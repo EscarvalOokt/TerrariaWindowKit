@@ -107,6 +107,11 @@ namespace Escarval.TerrariaWindowKit.TestHost
                 "close and dispose clean focus and popups after visibility queries turn false",
                 FocusVisibilityCleanup),
             Test("drag, resize and pin are opt-in and obey geometry limits", Geometry),
+            Test("content update suspends only owned bounds after checking priority", ContentUpdateScope),
+            Test("content update respects point-aware priority and skip conditions", ContentUpdatePriority),
+            Test("content update preserves callback and bounds cleanup failures", ContentUpdateFailures),
+            Test("content update handles close, reopen, geometry and disposal", ContentUpdateLifecycle),
+            Test("nested content updates restore owned bounds only at the outer boundary", ContentUpdateNested),
             Test("scroll decisions precede any bounds removal", ScrollSnapshot),
             Test("Core priority selects wheel owner when local activation order is stale", StaleActivationWheel),
             Test("scroll scopes restore bounds and tolerate disposal", ScrollScope),
@@ -700,6 +705,228 @@ namespace Escarval.TerrariaWindowKit.TestHost
             Equal(1, disposed["popupCloses"], "Dispose releases popup exactly once.");
         }
 
+        private static void ContentUpdateScope()
+        {
+            string first = Create(_first, "content-a", "root");
+            string second = Create(_second, "content-b", "root");
+            _first.Call("Open", first);
+            _second.Call("Open", second);
+            var firstId = (string)_first.Map("Window", first)["id"];
+            var secondId = (string)_second.Map("Window", second)["id"];
+            Bounds()["foreign-panel"] = [800, 600, 100, 100];
+            _first.Call("ResetEvents");
+
+            Assert(
+                (bool)_first.Call("UpdateContent", first, 110, 110, "normal"),
+                "An eligible root runs its content update.");
+            IDictionary<string, object> window = _first.Map("Window", first);
+            Equal(1, window["contentUpdates"], "The content callback runs once.");
+            Equal(2, window["boundsAtContent"], "Other consumer and foreign bounds stay registered.");
+            Equal(false, window["ownBoundsAtContent"], "The content does not see its own blocking bounds.");
+            Assert(Bounds().ContainsKey(firstId), "The root restores its bounds after content update.");
+            Assert(Bounds().ContainsKey(secondId), "The other consumer's bounds are untouched.");
+            Assert(Bounds().ContainsKey("foreign-panel"), "Foreign bounds are never removed.");
+
+            var events = (string[])_first.Call("Events");
+            int priorityCheck = Array.FindIndex(events, e => e == "blocked:" + firstId);
+            int boundsRemoval = Array.FindIndex(events, e => e == "bounds-:" + firstId);
+            int content = Array.FindIndex(events, e => e == "content:" + firstId);
+            int restoration = Array.FindIndex(events, e => e == "bounds+:" + firstId);
+            Assert(
+                priorityCheck >= 0 && priorityCheck < boundsRemoval && boundsRemoval < content && content < restoration,
+                "Priority precedes scope acquisition, callback and restoration.");
+            Equal(
+                3,
+                ((Dictionary<string, int>)State()["blockedChecks"])[firstId],
+                "Priority sees the original registrations.");
+
+            Assert(
+                (bool)_second.Call("UpdateContent", second, 900, 700, "normal"),
+                "The second source-only assembly can independently update its content.");
+            Equal(
+                false,
+                _second.Map("Window", second)["ownBoundsAtContent"],
+                "The second root also suspends only its own bounds.");
+            Equal(3, Bounds().Count, "Both consumers and the foreign registration survive both updates.");
+        }
+
+        private static void ContentUpdatePriority()
+        {
+            string fallback = Create(_first, "content", "fallback");
+            _first.Call("Open", fallback);
+            var fallbackId = (string)_first.Map("Window", fallback)["id"];
+            Assert(
+                (bool)_first.Call("UpdateContent", fallback, 110, 110, "normal"),
+                "The default backend allows an unblocked update.");
+
+            _first.Call("BlockInput", fallback, true);
+            _first.Call("ResetEvents");
+            Assert(
+                !(bool)_first.Call("UpdateContent", fallback, 110, 110, "normal"),
+                "The default backend blocks via IsInputBlocked.");
+            Equal(1, _first.Map("Window", fallback)["contentUpdates"], "Blocked input never invokes content.");
+            Assert(
+                ((string[])_first.Call("Events")).All(e => e != "bounds-:" + fallbackId),
+                "A blocked update must not alter registrations.");
+            _first.Call("BlockInput", fallback, false);
+
+            string pointAware = CreatePointAware(_second, "content", "point-aware");
+            _second.Call("Open", pointAware);
+            var id = (string)_second.Map("Window", pointAware)["id"];
+            _second.Call("BlockInput", pointAware, true);
+            _second.Call("ResetEvents");
+            Assert(
+                (bool)_second.Call("UpdateContent", pointAware, 321, 654, "normal"),
+                "Point-aware priority overrides the draw-phase fallback, including outside the root.");
+            var events = (string[])_second.Call("Events");
+            Assert(events.Any(e => e == "blocked-at:" + id), "Point-aware policy was queried.");
+            Assert(events.All(e => e != "blocked:" + id), "Draw-phase policy was not consulted.");
+            int[] checkedPoint = ((Dictionary<string, int[]>)State()["pointChecks"])[id];
+            Equal(321, checkedPoint[0], "Update X coordinate was passed through unchanged.");
+            Equal(654, checkedPoint[1], "Update Y coordinate was passed through unchanged.");
+            _second.Call("PointInputBlocked", pointAware, true);
+            Assert(
+                !(bool)_second.Call("UpdateContent", pointAware, 110, 110, "normal"),
+                "Higher-priority point-aware blocking vetoes content.");
+            Equal(
+                1,
+                _second.Map("Window", pointAware)["contentUpdates"],
+                "Point-aware rejection does not invoke content.");
+            _second.Call("PointInputBlocked", pointAware, false);
+
+            State()["menu"] = true;
+            try
+            {
+                Assert(
+                    !(bool)_first.Call("UpdateContent", fallback, 110, 110, "normal"),
+                    "The options menu prevents an open root's content update.");
+            }
+            finally
+            {
+                State()["menu"] = false;
+            }
+
+            _first.Call("Close", fallback);
+            Assert(
+                !(bool)_first.Call("UpdateContent", fallback, 110, 110, "normal"),
+                "Closed roots skip content updates.");
+            Throws<ArgumentNullException>(() => _first.Call("UpdateContentWithoutCallback", fallback, 110, 110));
+            _first.Call("Dispose", fallback);
+            Throws<ObjectDisposedException>(() => _first.Call("UpdateContent", fallback, 110, 110, "normal"));
+            Assert(Bounds().ContainsKey(id), "The remaining point-aware consumer is still registered.");
+        }
+
+        private static void ContentUpdateFailures()
+        {
+            string token = Create(_first, "content", "failures");
+            _first.Call("Open", token);
+            var id = (string)_first.Map("Window", token)["id"];
+
+            Throws<InvalidOperationException>(() => _first.Call("UpdateContent", token, 110, 110, "throw"));
+            Assert(Bounds().ContainsKey(id), "A throwing callback restores the original bounds.");
+
+            _first.Call("FailBoundsOperations", token, 0, 1);
+            Throws<InvalidOperationException>(() => _first.Call("UpdateContent", token, 110, 110, "normal"));
+            Equal(
+                1,
+                _first.Map("Window", token)["contentUpdates"],
+                "A failed bounds removal never invokes the callback.");
+            Assert(Bounds().ContainsKey(id), "Removal rollback restores bounds when registration succeeds.");
+
+            _first.Call("FailBoundsOperations", token, 1, 1);
+            AggregateException removalAndRollback =
+                CaptureAggregate(() => _first.Call("UpdateContent", token, 110, 110, "normal"));
+            Equal(2, removalAndRollback.InnerExceptions.Count, "Both removal and rollback failures are preserved.");
+            Assert(
+                removalAndRollback.InnerExceptions[0].Message.Contains("bounds unregistration"),
+                "The original removal failure is first.");
+            Assert(
+                removalAndRollback.InnerExceptions[1].Message.Contains("bounds registration"),
+                "The rollback failure is second.");
+            Equal(
+                1,
+                _first.Map("Window", token)["contentUpdates"],
+                "Neither failing bounds acquisition invokes the callback.");
+            _first.Call("Close", token);
+            _first.Call("Open", token);
+
+            _first.Call("FailBoundsOperations", token, 1, 0);
+            AggregateException callbackAndRestore =
+                CaptureAggregate(() => _first.Call("UpdateContent", token, 110, 110, "throw"));
+            Equal(2, callbackAndRestore.InnerExceptions.Count, "Both callback and restoration failures are preserved.");
+            Assert(
+                callbackAndRestore.InnerExceptions[0].Message.Contains("content update"),
+                "The original callback failure is first.");
+            Assert(
+                callbackAndRestore.InnerExceptions[1].Message.Contains("bounds registration"),
+                "The restoration failure is second.");
+            _first.Call("Close", token);
+            _first.Call("Open", token);
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 110, 110, "normal"),
+                "The host remains usable after explicit close/reopen recovery.");
+            Assert(
+                Bounds().ContainsKey(id),
+                "Normal restoration works after the test's injected failures are consumed.");
+        }
+
+        private static void ContentUpdateLifecycle()
+        {
+            string token = Create(_first, "content", "lifecycle");
+            _first.Call("Open", token);
+            var id = (string)_first.Map("Window", token)["id"];
+            _first.Call("Viewport", 220, 150);
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 110, 110, "fit"),
+                "Content may request a viewport fit while own bounds are suspended.");
+            IDictionary<string, object> window = _first.Map("Window", token);
+            Equal(20, window["x"], "Restoration uses the newly fitted X position.");
+            Equal(30, window["y"], "Restoration uses the newly fitted Y position.");
+            int[] bounds = Bounds()[id];
+            Equal(20, bounds[0], "The backend registration uses the updated position.");
+            Equal(30, bounds[1], "The backend registration uses the updated Y position.");
+
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 30, 40, "close"),
+                "Closing within content still completes the scoped callback.");
+            Assert(!Open(_first, token), "Content closure leaves the root closed.");
+            Assert(!Bounds().ContainsKey(id), "Closure cannot resurrect its bounds on scope exit.");
+            _first.Call("Open", token);
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 30, 40, "reopen"),
+                "A close/open transition within content is supported.");
+            Assert(Open(_first, token), "The reopened root stays open.");
+            Assert(Bounds().ContainsKey(id), "The current root bounds return at the outer scope boundary.");
+
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 30, 40, "dispose"),
+                "Disposal within content still completes the scoped callback.");
+            Assert(!Bounds().ContainsKey(id), "Disposal does not resurrect bounds.");
+            Equal(0, _second.Map("Snapshot")["windowCount"], "Disposal removes the coordinator registration.");
+        }
+
+        private static void ContentUpdateNested()
+        {
+            string token = Create(_first, "content", "nested");
+            _first.Call("Open", token);
+            var id = (string)_first.Map("Window", token)["id"];
+            Assert(
+                (bool)_first.Call("UpdateContent", token, 110, 110, "nested"),
+                "Nested callbacks are permitted on the same UI thread.");
+            IDictionary<string, object> window = _first.Map("Window", token);
+            Equal(1, window["nestedUpdates"], "The inner callback runs once.");
+            Equal(false, window["ownBoundsAtNested"], "The inner callback observes suspended own bounds.");
+            Equal(0, window["boundsAfterNested"], "The inner scope does not restore bounds early.");
+            Assert(Bounds().ContainsKey(id), "The outer scope restores owned bounds exactly once.");
+
+            _first.Call("ResetEvents");
+            Throws<ArgumentException>(() => _first.Call("UpdateContent", token, 110, 110, "nested-throw"));
+            Assert(Bounds().ContainsKey(id), "An exceptional nested update restores bounds at the outer boundary.");
+            var events = (string[])_first.Call("Events");
+            Equal(1, events.Count(e => e == "bounds-:" + id), "Nested exceptional entry removes bounds once.");
+            Equal(1, events.Count(e => e == "bounds+:" + id), "Nested exceptional exit restores bounds once.");
+        }
+
         private static void StaleActivationWheel()
         {
             string a = Create(_a, "consumer-a", "core-top");
@@ -984,6 +1211,13 @@ namespace Escarval.TerrariaWindowKit.TestHost
             return token;
         }
 
+        private static string CreatePointAware(Consumer consumer, string mod, string id)
+        {
+            var token = (string)consumer.Call("CreatePointAware", mod, id, 100, 100, 200, 120, false, false, false);
+            _created.Add(new KeyValuePair<Consumer, string>(consumer, token));
+            return token;
+        }
+
         private static bool Open(Consumer consumer, string token) => (bool)consumer.Map("Window", token)["open"];
         private static IDictionary<string, object> State() => _a.Map("SharedState");
         private static Dictionary<string, int[]> Bounds() => (Dictionary<string, int[]>)State()["bounds"];
@@ -1010,6 +1244,20 @@ namespace Escarval.TerrariaWindowKit.TestHost
         {
             if (!Equals(expected, actual))
                 throw new InvalidOperationException(message + " Expected: " + expected + "; actual: " + actual + ".");
+        }
+
+        private static AggregateException CaptureAggregate(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (AggregateException exception)
+            {
+                return exception;
+            }
+
+            throw new InvalidOperationException("Expected an AggregateException.");
         }
 
         private static void Throws<T>(Action action) where T : Exception

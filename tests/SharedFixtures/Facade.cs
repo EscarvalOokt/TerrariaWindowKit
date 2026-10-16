@@ -48,6 +48,35 @@ namespace UiConsumerB
             bool resizable,
             bool pinnable)
         {
+            return CreateWindow(modId, windowId, x, y, width, height, draggable, resizable, pinnable, false);
+        }
+
+        public static string CreatePointAware(
+            string modId,
+            string windowId,
+            int x,
+            int y,
+            int width,
+            int height,
+            bool draggable,
+            bool resizable,
+            bool pinnable)
+        {
+            return CreateWindow(modId, windowId, x, y, width, height, draggable, resizable, pinnable, true);
+        }
+
+        private static string CreateWindow(
+            string modId,
+            string windowId,
+            int x,
+            int y,
+            int width,
+            int height,
+            bool draggable,
+            bool resizable,
+            bool pinnable,
+            bool pointAware)
+        {
             var token = Guid.NewGuid().ToString("N");
             var record = new WindowRecord();
             var options = new WindowOptions(new WindowBounds(x, y, width, height))
@@ -98,7 +127,12 @@ namespace UiConsumerB
                     return record.Host.Bounds.Contains(pointerX, pointerY) ? record.WheelDisposition : 0;
                 }
             };
-            record.Host = new WindowHost(modId, windowId, options, new Backend(), callbacks);
+            record.Host = new WindowHost(
+                modId,
+                windowId,
+                options,
+                pointAware ? (IWindowBackend)new PointAwareBackend() : new Backend(),
+                callbacks);
             _windows.Add(token, record);
             return token;
         }
@@ -115,6 +149,77 @@ namespace UiConsumerB
             Get(token).Host.UpdatePointer(x, y, down, blocked);
 
         public static void Refresh(string token) => Get(token).Host.RefreshGeometry();
+
+        public static bool UpdateContent(string token, int x, int y, string operation)
+        {
+            WindowRecord record = Get(token);
+            return record.Host.TryUpdateContent(
+                x,
+                y,
+                () =>
+                {
+                    record.ContentUpdates++;
+                    record.BoundsAtContent = BoundsMap().Count;
+                    record.OwnBoundsAtContent = BoundsMap().ContainsKey(record.Host.Id);
+                    Log("content:" + record.Host.Id);
+                    switch (operation)
+                    {
+                        case "normal":
+                            return;
+                        case "throw":
+                            throw new InvalidOperationException("Synthetic content update failure");
+                        case "close":
+                            record.Host.Close();
+                            return;
+                        case "dispose":
+                            record.Host.Dispose();
+                            return;
+                        case "reopen":
+                            record.Host.Close();
+                            if (!record.Host.Open()) throw new InvalidOperationException("Synthetic reopen failed");
+                            return;
+                        case "fit":
+                            record.Host.RefreshGeometry();
+                            return;
+                        case "nested":
+                        case "nested-throw":
+                            bool shouldThrow = operation == "nested-throw";
+                            record.Host.TryUpdateContent(
+                                x,
+                                y,
+                                () =>
+                                {
+                                    record.NestedUpdates++;
+                                    record.BoundsAtNested = BoundsMap().Count;
+                                    record.OwnBoundsAtNested = BoundsMap().ContainsKey(record.Host.Id);
+                                    Log("nested-content:" + record.Host.Id);
+                                    if (shouldThrow) throw new ArgumentException("Synthetic nested content failure");
+                                });
+                            record.BoundsAfterNested = BoundsMap().Count;
+                            return;
+                        default:
+                            throw new ArgumentOutOfRangeException(nameof(operation));
+                    }
+                });
+        }
+
+        public static bool UpdateContentWithoutCallback(string token, int x, int y) =>
+            Get(token).Host.TryUpdateContent(x, y, null);
+
+        public static void PointInputBlocked(string token, bool blocked)
+        {
+            string id = Get(token).Host.Id;
+            var blockedIds = (Dictionary<string, bool>)Shared()["pointBlockedIds"];
+            if (blocked) blockedIds[id] = true;
+            else blockedIds.Remove(id);
+        }
+
+        public static void FailBoundsOperations(string token, int registerCount, int unregisterCount)
+        {
+            string id = Get(token).Host.Id;
+            ((Dictionary<string, int>)Shared()["failRegisterCount"])[id] = registerCount;
+            ((Dictionary<string, int>)Shared()["failUnregisterCount"])[id] = unregisterCount;
+        }
 
         public static void ConfigureWindow(
             string token,
@@ -172,7 +277,14 @@ namespace UiConsumerB
                 ["popupCloses"] = record.PopupCloses,
                 ["boundsChanged"] = record.BoundsChanged,
                 ["wheelDecisions"] = record.WheelDecisions,
-                ["boundsAtDecision"] = record.BoundsAtDecision
+                ["boundsAtDecision"] = record.BoundsAtDecision,
+                ["contentUpdates"] = record.ContentUpdates,
+                ["boundsAtContent"] = record.BoundsAtContent,
+                ["ownBoundsAtContent"] = record.OwnBoundsAtContent,
+                ["nestedUpdates"] = record.NestedUpdates,
+                ["boundsAtNested"] = record.BoundsAtNested,
+                ["ownBoundsAtNested"] = record.OwnBoundsAtNested,
+                ["boundsAfterNested"] = record.BoundsAfterNested
             };
         }
 
@@ -370,6 +482,14 @@ namespace UiConsumerB
         private static void Log(string message) => EventList().Add(message);
         private static void Increment(string key, int delta) => Shared()[key] = (int)Shared()[key] + delta;
 
+        private static bool ConsumeFailure(string key, string id)
+        {
+            var failures = (Dictionary<string, int>)Shared()[key];
+            if (!failures.TryGetValue(id, out int count) || count <= 0) return false;
+            failures[id] = count - 1;
+            return true;
+        }
+
         private static Dictionary<string, object> Shared()
         {
             lock (AppDomain.CurrentDomain)
@@ -386,6 +506,10 @@ namespace UiConsumerB
                     ["draws"] = new Dictionary<string, Action>(),
                     ["blockedChecks"] = new Dictionary<string, int>(),
                     ["blockedIds"] = new Dictionary<string, bool>(),
+                    ["pointBlockedIds"] = new Dictionary<string, bool>(),
+                    ["pointChecks"] = new Dictionary<string, int[]>(),
+                    ["failRegisterCount"] = new Dictionary<string, int>(),
+                    ["failUnregisterCount"] = new Dictionary<string, int>(),
                     ["events"] = new List<string>(),
                     ["escapeBlocks"] = 0,
                     ["installs"] = 0,
@@ -409,12 +533,19 @@ namespace UiConsumerB
 
         private sealed class WindowRecord
         {
+            public int BoundsAfterNested = -1;
+            public int BoundsAtContent = -1;
             public int BoundsAtDecision;
+            public int BoundsAtNested = -1;
             public int BoundsChanged;
+            public int ContentUpdates;
             public WindowHost Host;
             public bool Keyboard = true;
             public string[] KeyboardPanelOrder;
             public string[] MouseOverKeyboardPanels;
+            public int NestedUpdates;
+            public bool OwnBoundsAtContent;
+            public bool OwnBoundsAtNested;
             public bool Popup;
             public int PopupCloses;
             public bool QueryRequiresOpen;
@@ -425,7 +556,7 @@ namespace UiConsumerB
             public int WheelDisposition;
         }
 
-        private sealed class Backend : IWindowBackend
+        private class Backend : IWindowBackend
         {
             public int ViewportWidth => (int)Shared()["viewportWidth"];
             public int ViewportHeight => (int)Shared()["viewportHeight"];
@@ -452,6 +583,12 @@ namespace UiConsumerB
 
             public void RegisterBounds(string id, WindowBounds bounds)
             {
+                if (ConsumeFailure("failRegisterCount", id))
+                {
+                    Log("bounds!+:" + id);
+                    throw new InvalidOperationException("Synthetic bounds registration failure");
+                }
+
                 BoundsMap()[id] = [bounds.X, bounds.Y, bounds.Width, bounds.Height];
                 Log("bounds+:" + id);
             }
@@ -460,6 +597,8 @@ namespace UiConsumerB
             {
                 BoundsMap().Remove(id);
                 Log("bounds-:" + id);
+                if (ConsumeFailure("failUnregisterCount", id))
+                    throw new InvalidOperationException("Synthetic bounds unregistration failure");
             }
 
             public void BringToFront(string id) => Log("front:" + id);
@@ -473,6 +612,18 @@ namespace UiConsumerB
                     Increment("escapeBlocks", -1);
                     Log("escape-");
                 });
+            }
+        }
+
+        private sealed class PointAwareBackend : Backend, IWindowUpdateInput
+        {
+            public bool IsInputBlockedAt(string id, int x, int y)
+            {
+                ((Dictionary<string, int>)Shared()["blockedChecks"])[id] = BoundsMap().Count;
+                ((Dictionary<string, int[]>)Shared()["pointChecks"])[id] = [x, y];
+                Log("blocked-at:" + id);
+                return ((Dictionary<string, bool>)Shared()["pointBlockedIds"]).TryGetValue(id, out bool blocked) &&
+                       blocked;
             }
         }
 

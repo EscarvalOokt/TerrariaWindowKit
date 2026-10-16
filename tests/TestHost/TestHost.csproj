@@ -16,6 +16,9 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="..\..\src\Core\CoreCompatibilityChecks.cs" Link="CoreCompatibilityChecks.cs"/>
+        <Compile Include="..\..\src\Core\CorePinButtonRenderer.cs" Link="CorePinButtonRenderer.cs"/>
+        <Compile Include="..\..\src\Core\CoreWindowBackend.cs" Link="CoreWindowBackend.cs"/>
+        <Compile Include="..\..\src\Core\CoreInputPolicy.cs" Link="CoreInputPolicy.cs"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\ConsumerA\ConsumerA.csproj" ReferenceOutputAssembly="false"/>
@@ -32,4 +35,5 @@
         </MSBuild>
         <Copy SourceFiles="@(ConsumerAssembly)" DestinationFolder="$(TargetDir)"/>
     </Target>
+    <Import Project="..\..\src\TerrariaWindowKit.Source.projitems" Label="Shared"/>
 </Project>

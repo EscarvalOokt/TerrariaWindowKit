@@ -151,6 +151,13 @@ namespace Escarval.TerrariaWindowKit
             return target;
         }
 
+        internal static MethodInfo ResolveNativeInputGetter(Type inputType)
+        {
+            if (inputType == null) throw new ArgumentNullException(nameof(inputType));
+            const string name = "IgnoreMouseInterface";
+            return RequirePublicStaticProperty(inputType, name, typeof(bool), false);
+        }
+
         private static void RequirePublicMethod(
             Type declaringType,
             string name,
@@ -185,15 +192,19 @@ namespace Escarval.TerrariaWindowKit
                 throw new MissingMethodException(declaringType.FullName, ".ctor");
         }
 
-        private static void RequirePublicStaticProperty(Type declaringType, string name, Type valueType, bool writable)
+        private static MethodInfo RequirePublicStaticProperty(
+            Type declaringType,
+            string name,
+            Type valueType,
+            bool writable)
         {
             const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
             PropertyInfo property = declaringType.GetProperty(name, flags);
             if (property != null &&
                 property.PropertyType == valueType &&
                 property.GetIndexParameters().Length == 0 &&
-                property.GetGetMethod() is { IsStatic: true } &&
-                (!writable || property.GetSetMethod() is { IsStatic: true })) return;
+                property.GetGetMethod() is { IsStatic: true } getter &&
+                (!writable || property.GetSetMethod() is { IsStatic: true })) return getter;
             throw new MissingMemberException(declaringType.FullName, name);
         }
 

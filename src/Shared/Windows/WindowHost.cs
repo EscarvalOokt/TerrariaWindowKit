@@ -223,6 +223,53 @@ namespace Escarval.TerrariaWindowKit
                 SetBounds(bounds);
         }
 
+        /// <summary>Updates consumer-owned content without the backend's panel bounds blocking native UI.</summary>
+        /// <remarks>
+        /// Supply update-phase UI coordinates and a synchronous callback. Point-aware backend priority
+        /// is evaluated while all bounds are still registered. A content-aware backend supplies a native
+        /// input scope; other backends suspend only this host's bounds. The consumer owns wheel delivery.
+        /// </remarks>
+        /// <returns>False when closed, in the options menu, or blocked by a higher-priority panel.</returns>
+        internal bool TryUpdateContent(int x, int y, Action updateContent)
+        {
+            if (updateContent == null) throw new ArgumentNullException(nameof(updateContent));
+            ThrowIfDisposed();
+            if (!IsOpen || _backend.IsMenuOpen) return false;
+            // The optional backend implementation may be outside the shared project's analysis context.
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            bool blocked = _backend is IWindowUpdateInput input
+                ? input.IsInputBlockedAt(Id, x, y)
+                : _backend.IsInputBlocked(Id);
+            if (blocked) return false;
+
+            // The optional backend implementation may be outside the shared project's analysis context.
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            IDisposable scope = _backend is IWindowContentInput contentInput
+                ? contentInput.BeginContentUpdate(Id, x, y)
+                : SuspendBounds();
+            if (scope == null) throw new InvalidOperationException("A content update scope is required.");
+            try
+            {
+                updateContent();
+            }
+            catch (Exception updateFailure)
+            {
+                try
+                {
+                    scope.Dispose();
+                }
+                catch (Exception restoreFailure)
+                {
+                    throw new AggregateException(updateFailure, restoreFailure);
+                }
+
+                throw;
+            }
+
+            scope.Dispose();
+            return true;
+        }
+
         /// <summary>Fits current bounds to the current viewport and configured minimum size.</summary>
         /// <remarks>Open and draw call this automatically; changed bounds notify BoundsChanged.</remarks>
         internal void RefreshGeometry()
@@ -284,10 +331,18 @@ namespace Escarval.TerrariaWindowKit
             {
                 UnregisterBounds();
             }
-            catch
+            catch (Exception removalFailure)
             {
                 _boundsSuspended = false;
-                RegisterBounds();
+                try
+                {
+                    RegisterBounds();
+                }
+                catch (Exception restoreFailure)
+                {
+                    throw new AggregateException(removalFailure, restoreFailure);
+                }
+
                 throw;
             }
 

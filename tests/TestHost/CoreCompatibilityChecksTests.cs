@@ -401,6 +401,10 @@ namespace Escarval.TerrariaWindowKit.TestHost
                 typeof(void),
                 new[] { typeof(SyntheticPlayer) });
             yield return new TestCaseData("DoScrollingInInventoryPrefix", typeof(bool), Type.EmptyTypes);
+            yield return new TestCaseData(
+                "IgnoreMouseInterfacePostfix",
+                typeof(void),
+                new[] { typeof(bool).MakeByRefType() });
         }
 
         [TestCaseSource(nameof(RequiredMethods))]
@@ -443,6 +447,38 @@ namespace Escarval.TerrariaWindowKit.TestHost
                         [typeof(object)]);
                 }),
                 Throws.TypeOf<MissingMethodException>());
+        }
+
+        [Test]
+        public void ContentInputTargetRequiresBooleanByReference()
+        {
+            Assert.That(
+                (Action)(() => CoreCompatibilityChecks.ResolveTarget(
+                    typeof(CompatibleMethods),
+                    "IgnoreMouseInterfacePostfix",
+                    typeof(void),
+                    [typeof(bool)])),
+                Throws.TypeOf<MissingMethodException>());
+        }
+
+        [Test]
+        public void NativeInputGetterRequiresThePublicStaticBooleanContract()
+        {
+            MethodInfo getter = CoreCompatibilityChecks.ResolveNativeInputGetter(typeof(CompatibleNativeInput));
+            Assert.That(getter.ReturnType, Is.EqualTo(typeof(bool)));
+            Assert.That(getter.IsStatic, Is.True);
+            Assert.That(getter.IsPublic, Is.True);
+            Assert.That(getter.GetParameters(), Is.Empty);
+        }
+
+        [TestCase(typeof(InstanceNativeInput))]
+        [TestCase(typeof(WrongNativeInput))]
+        [TestCase(typeof(CompatibleWidgetInput))]
+        public void IncompatibleNativeInputGetterIsRejected(Type inputType)
+        {
+            Assert.That(
+                (Action)(() => CoreCompatibilityChecks.ResolveNativeInputGetter(inputType)),
+                Throws.TypeOf<MissingMemberException>());
         }
 
         [Test]
@@ -872,6 +908,25 @@ namespace Escarval.TerrariaWindowKit.TestHost
             }
 
             private static bool DoScrollingInInventoryPrefix() => false;
+
+            private static void IgnoreMouseInterfacePostfix(ref bool ignored)
+            {
+            }
+        }
+
+        private sealed class CompatibleNativeInput
+        {
+            public static bool IgnoreMouseInterface => false;
+        }
+
+        private sealed class InstanceNativeInput
+        {
+            public bool IgnoreMouseInterface => false;
+        }
+
+        private sealed class WrongNativeInput
+        {
+            public static int IgnoreMouseInterface => 0;
         }
 
         private sealed class IncompatibleMethods

@@ -16,12 +16,14 @@ namespace Escarval.TerrariaWindowKit
     /// Compatible consumers in the same AppDomain share the runtime installation.
     /// Structural checks do not establish runtime behavior for untested configurations.
     /// </remarks>
-    internal sealed class CoreWindowBackend : IWindowBackend, IWindowUpdateInput, IWindowKeyboardInput, IDisposable
+    internal sealed class CoreWindowBackend : IWindowBackend, IWindowUpdateInput, IWindowContentInput,
+        IWindowKeyboardInput, IDisposable
     {
         private readonly HashSet<string> _boundsIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly SharedCoordinator _coordinator;
         private readonly HashSet<string> _drawIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly IDisposable _runtimeLease;
+        private IDisposable _contentInputBoundary;
         private bool _disposed;
 
         /// <summary>Acquires a compatible shared Core runtime lease through a connected coordinator.</summary>
@@ -43,6 +45,8 @@ namespace Escarval.TerrariaWindowKit
             if (_disposed) return;
             foreach (string id in new List<string>(_boundsIds)) UnregisterBounds(id);
             foreach (string id in new List<string>(_drawIds)) UnregisterDraw(id);
+            _contentInputBoundary?.Dispose();
+            _contentInputBoundary = null;
             _runtimeLease.Dispose();
             _disposed = true;
         }
@@ -128,6 +132,24 @@ namespace Escarval.TerrariaWindowKit
             var lease = new EscapeLease(KeyboardInputPolicy.EscapeBlockPrefix + Guid.NewGuid().ToString("N"));
             UIRenderer.RegisterKeyInputBlock(lease.Id);
             return lease;
+        }
+
+        /// <summary>Allows native UI input without removing any participating or foreign panel bounds.</summary>
+        public IDisposable BeginContentUpdate(string id, int x, int y)
+        {
+            ThrowIfDisposed();
+            // This optional boundary is local to each source copy, so an older consumer may still own
+            // the shared runtime. Each copy removes only its own prefix when its last backend disposes.
+            _contentInputBoundary ??= HarmonyContentInputBoundary.Patch(
+                CoreCompatibilityChecks.ResolveTarget(
+                    typeof(UIRenderer),
+                    "IgnoreMouseInterfacePostfix",
+                    typeof(void),
+                    [typeof(bool).MakeByRefType()]),
+                CoreCompatibilityChecks.ResolveNativeInputGetter(typeof(PlayerInput)));
+
+            return HarmonyContentInputBoundary.Enter(() =>
+                !_disposed && !IsMenuOpen && _boundsIds.Contains(id) && !CoreInputPolicy.IsPointerBlocked(id, x, y));
         }
 
         /// <summary>Rejects foreign keyboard/text owners, Core text input/release and higher-panel priority.</summary>

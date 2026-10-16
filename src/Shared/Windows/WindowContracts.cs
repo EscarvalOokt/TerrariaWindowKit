@@ -2,7 +2,7 @@ using System;
 
 namespace Escarval.TerrariaWindowKit
 {
-    /// <summary>Reason supplied to Closed after the window becomes invisible and its bounds are removed.</summary>
+    /// <summary>Reason supplied to Closed after state reset and attempted bounds/content cleanup.</summary>
     internal enum CloseReason
     {
         /// <summary>Explicit Close or Toggle.</summary>
@@ -70,11 +70,22 @@ namespace Escarval.TerrariaWindowKit
         IDisposable AcquireEscapeBlock();
     }
 
-    /// <summary>Optional point-aware input priority for update-phase wheel selection.</summary>
+    /// <summary>Optional point-aware input priority for update-phase wheel selection and content updates.</summary>
     internal interface IWindowUpdateInput
     {
         /// <summary>Checks the supplied UI point, without relying on draw-phase mouse coordinates.</summary>
         bool IsInputBlockedAt(string id, int x, int y);
+    }
+
+    /// <summary>Optional native content-input scope that preserves registered panel bounds.</summary>
+    internal interface IWindowContentInput
+    {
+        /// <summary>Temporarily bypasses the backend's native mouse blocker for an eligible content update.</summary>
+        /// <remarks>
+        /// Called after input priority is checked. Keep panel registrations intact and preserve native
+        /// game input restrictions. Return a non-null scope; nesting and repeated disposal must be safe.
+        /// </remarks>
+        IDisposable BeginContentUpdate(string id, int x, int y);
     }
 
     /// <summary>Optional keyboard eligibility, checked before scheduling and completing an Escape action.</summary>
@@ -116,7 +127,7 @@ namespace Escarval.TerrariaWindowKit
         /// <remarks>Null means pass-through. Keep content ownership at scroll limits and without overflow.</remarks>
         internal Func<int, int, int> WheelAt { get; set; }
 
-        /// <summary>Overrides update-point priority entirely; null uses IWindowUpdateInput, then IsInputBlocked.</summary>
+        /// <summary>Overrides update-point priority for wheel selection only; null uses IWindowUpdateInput, then IsInputBlocked.</summary>
         internal Func<int, int, bool> WheelInputBlocked { get; set; }
 
         /// <summary>Runs once per open-to-closed transition, after state reset and attempted bounds/content cleanup.</summary>

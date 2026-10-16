@@ -26,9 +26,9 @@ A successful compilation establishes that the imported sources compile against *
 
 ## Cross-assembly and contract tests
 
-`tests/ConsumerA/ConsumerA.csproj` and `tests/ConsumerB/ConsumerB.csproj` compile `Shared` sources into two independent consumer assemblies, without the Core adapter. Both use `tests/SharedFixtures/Facade.cs`, which supplies a BCL-only facade and a synthetic backend.
+`tests/ConsumerA/ConsumerA.csproj` and `tests/ConsumerB/ConsumerB.csproj` compile `Shared` sources into two independent consumer assemblies, without the Core adapter. Both use `tests/SharedFixtures/Facade.cs`, which supplies a BCL-only facade and a synthetic backend, and `ContentInputFacade.cs` for independently leased native-input Harmony prefixes.
 
-`tests/TestHost/TestHost.csproj` uses NUnit 4.6.1, NUnit3TestAdapter 6.2.0 and Microsoft.NET.Test.Sdk 18.8.1. Cross-assembly scenarios execute in both consumer-initialization orders in isolated AppDomains with non-parallel NUnit execution. A separate compatibility suite checks used Core/Harmony dependency signatures with synthetic types and the loaded Harmony assembly. Neither suite launches Terraria.
+`tests/TestHost/TestHost.csproj` uses NUnit 4.6.1, NUnit3TestAdapter 6.2.0 and Microsoft.NET.Test.Sdk 18.8.1. Cross-assembly scenarios execute in both consumer-initialization orders in isolated AppDomains with non-parallel NUnit execution. A separate compatibility suite checks used Core/Harmony dependency signatures with synthetic types and the loaded Harmony assembly. Adapter tests link the production host, Core backend, input policy and content boundary against synthetic Core/Terraria APIs, including an actual Harmony-patched native-input getter; runtime event startup is excluded. Presentation tests link the production pin renderer against a recording Core drawing facade. These tests do not launch Terraria.
 
 The scenarios cover:
 
@@ -39,6 +39,9 @@ The scenarios cover:
 | Escape and closing | One action per physical press, text/popup/root precedence, pin pass-through regardless of activation, protection by foreign higher-priority panels and keyboard blockers, menu/world cleanup. |
 | Geometry | Opt-in drag/resize/pin, minimum/viewport fitting and canceled pointer operations. |
 | Wheel and panel priority | Decisions before bounds changes, stale activation versus Core priority, nested suspension, restoration and wheel dispositions. |
+| Guarded content updates | Priority checks with all bounds registered; eligible native input over lower toolkit/foreign panels without bounds removal; higher-panel rejection, native game blockers and stale activation; fallback own-bounds suspension; nested updates, callback errors, geometry changes, closing, reopening and disposal. |
+| Native-input boundary | Local backend reference counts, independent prefixes in both source-copy orders, native and foreign blockers, current scope eligibility, UI thread ownership, rollback/retry and rebuilding already JIT-compiled native Harmony wrappers after attachment or cleanup. |
+| Pin-button presentation | Narrow Core truncation fallback cannot draw outside the button; exact-fit and centered labels, state colors, short/empty rectangles and stable width measurement. |
 | Harmony boundaries | Synthetic patch targets, nested calls, exception restoration, conflicting owners and preservation of foreign patches. |
 | Dependency compatibility | Exact required public Core/Harmony method return/parameter types, property accessors and member kinds; private fields/targets; positive version variation and negative structural changes. |
 
@@ -52,7 +55,9 @@ Three evidence levels remain distinct:
 2. **Compilation and automated tests** establish the configuration and test scenarios actually executed, not correctness of the real game integration.
 3. **In-game runtime validation** confirms only the observed scenarios on the stated Terraria/Core/Harmony installation and consumer builds. Rebuilding or changing a dependency can require targeted revalidation; a previous acceptance result does not automatically transfer to that change.
 
-In-game checks relevant to TerrariaWindowKit include window rendering and activation, pinned/unpinned Escape with more than one source-only consumer, foreign panel/keyboard priority, wheel and Vanilla click handling, menu/world transitions, viewport scaling and release of shared runtime/Harmony resources. Cross-consumer coordination guarantees belong to the toolkit; individual consumers need only test their own integrations. Synthetic ConsumerA/ConsumerB tests do not replace simultaneous installed-mod acceptance.
+In-game checks relevant to TerrariaWindowKit include window rendering and activation, pinned/unpinned Escape with more than one source-only consumer, foreign panel/keyboard priority, wheel and Vanilla click handling, guarded updates of consumer-owned UI, menu/world transitions, viewport scaling and release of shared runtime/Harmony resources. Cross-consumer coordination guarantees belong to the toolkit; individual consumers need only test their own integrations. Synthetic ConsumerA/ConsumerB tests do not replace simultaneous installed-mod acceptance.
+
+The optional Core-only renderers require consumer-side visual checks: `CoreResizeGripRenderer` for positioning, hover/active-resize appearance and UI scaling; `CorePinButtonRenderer` for placement, both labels, width remeasurement after localization changes, hover/pinned appearance and UI scaling. Consumers separately verify pin-button hit testing, input blocking, toggling through `WindowHost.SetPinned(...)`, and pin reset after close/reopen. Compiling these helper calls against selected Core assemblies does not verify their drawing in Terraria. An observed integration in one consumer does not establish equivalent visuals or input behavior in other consumers.
 
 A structural contract pass permits a configuration to attempt attachment, but does not mean it has been tested in-game. Successful in-game validation of specific dependency configurations does not establish compatibility with future Core or Harmony versions or untested circumstances.
 

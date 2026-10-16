@@ -4,7 +4,7 @@ This document describes the **current implementation** of TerrariaWindowKit, a s
 
 ## Design boundaries
 
-The toolkit owns root-window lifecycle, geometry and coordinated input. The consumer owns window content, drawing, visual controls, pointer hit testing, text focus, popup state and widget-level wheel delivery.
+The toolkit owns root-window lifecycle, geometry and coordinated input. The consumer owns window content, drawing, visual controls, pointer hit testing, text focus, popup state and widget-level wheel delivery. The optional Core `CoreResizeGripRenderer` and `CorePinButtonRenderer` supply standard resize-grip and pin-button visuals without owning their layout, hit testing, hover eligibility, tooltips or input. `WindowHost` remains the owner of pin state.
 
 The source tree separates those concerns:
 
@@ -12,8 +12,8 @@ The source tree separates those concerns:
 | --- | --- | --- |
 | Shared window layer | Root lifecycle, options, geometry, pointer operations, callbacks and local backend contracts | `src/Shared/Windows/` |
 | Shared coordination | Shared provider, window ordering, Escape and wheel arbitration, runtime leases | `src/Shared/Coordination/SharedCoordinator.cs` |
-| Shared compatibility | Keyboard policy and Harmony scroll-boundary implementation | `src/Shared/Compatibility/` |
-| Core adapter | TerrariaModder Core rendering/input registrations, private metadata checks and game event integration | `src/Core/` |
+| Shared compatibility | Keyboard policy and Harmony boundaries for scroll and native mouse input | `src/Shared/Compatibility/` |
+| Core adapter | TerrariaModder Core rendering/input registrations, private metadata checks, game event integration and optional window-control presentation | `src/Core/` |
 | Consumer | Content rendering, hit testing and owned UI state | Outside this toolkit, inside each importing mod |
 
 Dependencies point from `WindowHost` to local backend contracts and the shared coordinator; the Core adapter implements those contracts using TerrariaModder Core. Consumer callbacks provide content behavior without making the shared window layer depend on game-specific widget classes. The Core runtime depends on Terraria, TerrariaModder Core and Harmony, whereas the shared window/coordinator layer can be compiled without Core integration.
@@ -44,8 +44,8 @@ Ownership is explicit:
 
 - The consumer owns callbacks and content state; cleanup callbacks must release only their own resources and tolerate repeated calls.
 - The host owns its coordinator registration and draw registration, but **not** the backend.
-- The backend owns Core draw/bounds registrations and one runtime lease; one backend may serve several hosts.
-- The shared runtime owns Core event subscriptions and Harmony patches for a compatible runtime family.
+- The backend owns Core draw/bounds registrations, one shared runtime lease and, after the first content update, an optional lease on its source copy's content-input boundary; one backend may serve several hosts.
+- The shared runtime owns Core event subscriptions and shared Harmony scroll patches for a compatible runtime family.
 
 Hosts must be disposed before their backend. The coordinator and Harmony scopes use disposable leases for temporary state. Cleanup operations attempt to preserve or restore owned state; failures are surfaced rather than silently hidden. In particular, last-lease runtime cleanup can be retried and blocks new acquisition of that runtime family until cleanup succeeds.
 
@@ -65,17 +65,19 @@ The in-game options menu closes all participating roots; inventory and ordinary 
 
 To let the wheel reach its selected owner (or the game on pass-through), the provider temporarily suspends registered bounds of the other open participating windows. It leaves unrelated Core panels' registrations untouched. Nested scroll scopes share one suspension depth and restore bounds after the outermost scope completes.
 
+Separately, `WindowHost.TryUpdateContent()` guards a consumer-owned UI update: it checks input priority with the current registrations in place, then opens an optional `IWindowContentInput` scope for the synchronous callback. With `IWindowUpdateInput`, it checks priority at the supplied update-phase UI coordinates; otherwise it uses the backend's general input-block check. The Core backend keeps all registrations intact and temporarily bypasses only Core's additional native mouse blocker for the eligible host. Other backends fall back to suspending only that host's own bounds; nested fallback calls preserve the outer suspension, and closing or disposing the host prevents restoration of stale bounds. This mechanism does not select a wheel owner, deliver widget scroll input or suspend other consumers' registrations. The API reference owns its callable contract.
+
 The Core update-coordinate priority check relies on private `UIRenderer` panel ordering/bounds. This is distinct from draw-time `WidgetInput.BlockInput`, which is only meaningful in Core's draw phase. `UiViewport` and the Core adapter translate screen dimensions and update mouse coordinates into UI units using the validated UI scale.
 
 ## Core integration and version boundary
 
-`CoreWindowBackend` implements `IWindowBackend`, `IWindowKeyboardInput`, `IWindowUpdateInput` and `IDisposable`. It bridges draw callbacks, hit boxes, activation, keyboard blocking and update-phase priority into `UIRenderer` and related Core APIs. It acquires a shared runtime lease during construction, after the coordinator has been connected.
+`CoreWindowBackend` implements `IWindowBackend`, `IWindowKeyboardInput`, `IWindowUpdateInput`, `IWindowContentInput` and `IDisposable`. It bridges draw callbacks, hit boxes, activation, keyboard blocking and update-phase priority into `UIRenderer` and related Core APIs. It acquires a shared runtime lease during construction, after the coordinator has been connected.
 
 `CoreRuntime.Attach()` checks the **required loaded API contracts** rather than comparing Core or Harmony assembly versions for exact equality:
 
 - `CoreCompatibilityChecks.ValidateCoreContracts` verifies the public renderer operations used by the backend, including exact CLR parameter/return types and static form. It also requires public static `bool` properties for `WidgetInput.BlockInput` (getter and setter) and `WidgetInput.MouseLeftClick` (getter), not interchangeable fields.
 - `CoreCompatibilityChecks.ValidateHarmonyContracts` checks the required Harmony constructors and `GetPatchInfo`, `Patch` and `Unpatch` methods, plus the instance property `Patches.Owners` with a public getter of type `ReadOnlyCollection<string>`.
-- `CoreInputPolicy.ValidateMetadata` and the scroll-target resolver check required private Core fields and nonpublic static methods for their exact types and signatures. The private `UIRenderer` patch targets are:
+- `CoreInputPolicy.ValidateMetadata` and the scroll-target resolver check required private Core fields and nonpublic static methods for their exact types and signatures. The startup scroll patch targets in `UIRenderer` are:
 
 | Target | Required signature |
 | --- | --- |
@@ -89,9 +91,11 @@ Failure to match a required structural contract prevents attachment. An unrelate
 
 `SharedCoordinator.AcquireRuntime` shares an installation by runtime family and requires an identical opaque runtime signature from each attached consumer. The stable family is `escarval.terrariawindowkit.core.runtime`; the current implementation contract is `escarval.terrariawindowkit.core.runtime/2;scroll=1;input=3`. `CoreCompatibilityChecks.CreateRuntimeSignature` appends type-handle identities of the **actual loaded CLR dependency types**, so an identically named but different loaded dependency does not silently join the same runtime. The first compatible consumer installs the Core runtime; later ones acquire leases without duplicate event handlers or patches. The last lease releases that installation. An incompatible signature is rejected without invoking a second installer.
 
-The project version is `1.0.0` (`src/Directory.Build.props`), and the provider API also reports `providerVersion = "1.0.0"`. These descriptive version values do not replace coordinator protocol major `2` or the runtime signature, which determine whether independent source-only consumers can share the provider and runtime.
+The project version is `1.1.0` (`src/Directory.Build.props`), and the provider API also reports `providerVersion = "1.1.0"`. These descriptive version values do not replace coordinator protocol major `2` or the runtime signature, which determine whether independent source-only consumers can share the provider and runtime.
 
 `HarmonyScrollBoundary` installs only the explicitly resolved patch targets (not `PatchAll`), using the stable Harmony owner `escarval.terrariawindowkit.core.scroll`. It checks for conflicting ownership, rolls back partial patch installation and uses a prefix/finalizer pair to restore suspended bounds even if a target throws. Both the family and Harmony owner are independent of external Core/Harmony version numbers; they are not renumbered for each compatible dependency release.
+
+On first content update, a Core backend also leases its source copy's `HarmonyContentInputBoundary` prefix on the private `void UIRenderer.IgnoreMouseInterfacePostfix(ref bool)` method. Within an eligible synchronous content scope the prefix skips only this Core blocker; it does not overwrite the native getter's result. Eligibility is checked against the still-registered host and current higher-panel bounds. Backends in one source copy reference-count this optional patch, and independently compiled copies can install distinct prefixes on the same target. Last-lease cleanup removes only that copy's prefix method, preserving other copies and foreign patches. Attachment and cleanup rebuild the existing Harmony wrapper of the public static `bool PlayerInput.IgnoreMouseInterface` getter, retaining its patches, because the small Core postfix may already have been inlined into that wrapper. This optional boundary does not change the coordinator ABI or the shared Core runtime signature, so older consumers can still own the shared runtime.
 
 ## Compatibility states and verification
 
